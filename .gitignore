@@ -1,0 +1,23 @@
+# Secretos
+.env
+.streamlit/secrets.toml
+
+# Entornos virtuales
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Sistema / editores
+.DS_Store
+.vscode/
+.idea/
+
+# NOTA: chroma_db/ NO se ignora (se versiona para desplegar en Streamlit Cloud)
+
+# PDF del Reglamento General de Circulación: 258 MB (supera el límite de 100 MB de GitHub).
+# Se descarga de https://www.boe.es/buscar/pdf/2003/BOE-A-2003-23514-consolidado.pdf
+data/BOE-A-2003-23514-consolidado.pdf
