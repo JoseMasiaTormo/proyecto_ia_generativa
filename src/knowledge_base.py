@@ -229,7 +229,7 @@ def load_document(path: Path) -> LoadedDocument:
     text_parts, offsets, pos = [], [], 0
     segs = marked.split("\x00")[1:]  # [nº página, texto, nº página, texto, ...]
     page_nums, page_texts = segs[0::2], segs[1::2]
-    for n, p in zip(page_nums, page_texts):
+    for p in page_texts:
         p = p.removesuffix("\n")
         offsets.append(pos)
         text_parts.append(p)
@@ -466,7 +466,7 @@ class HybridRetriever(BaseRetriever):
                 return self.vectorstore.similarity_search(query, k=self.fetch_k)
             except Exception as err:  # noqa: BLE001
                 if attempt == attempts - 1:
-                    warnings.warn(f"Búsqueda vectorial no disponible ({err}); se usa solo BM25.")
+                    warnings.warn(f"Búsqueda vectorial no disponible ({err}); se usa solo BM25.", stacklevel=2)
                     return []
                 time.sleep(2 ** (attempt + 1))
         return []

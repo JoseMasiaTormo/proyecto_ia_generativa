@@ -12,12 +12,12 @@ import contextvars
 import random
 import re
 import time
+import uuid
 from typing import Annotated, TypedDict
 
 import httpx
-
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -315,7 +315,16 @@ def chat(agent, mensaje: str, thread_id: str = "default", solo_citadas: bool = T
     pregunta fuera de tema o sin respuesta en el contexto), la lista queda vacía.
     """
     config = {"configurable": {"thread_id": thread_id}}
-    state = agent.invoke({"messages": [HumanMessage(mensaje)]}, config=config)
+    pregunta = HumanMessage(mensaje, id=f"q-{uuid.uuid4().hex}")
+    try:
+        state = agent.invoke({"messages": [pregunta]}, config=config)
+    except BaseException:
+        # Si falla a mitad (p. ej. Gemini saturado o interrupción del usuario), el
+        # checkpointer ya ha guardado la pregunta sin respuesta. Se quita y se marca el
+        # turno como terminado, para que la memoria no se quede con una pregunta huérfana.
+        if any(m.id == pregunta.id for m in agent.get_state(config).values.get("messages", [])):
+            agent.update_state(config, {"messages": [RemoveMessage(id=pregunta.id)]}, as_node="generar")
+        raise
     respuesta = _text(state["messages"][-1])
     fuentes = extract_sources(respuesta, state["context"])
     if solo_citadas:
