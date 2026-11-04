@@ -8,6 +8,7 @@ Uso:
 
 from __future__ import annotations
 
+import contextvars
 import random
 import re
 import time
@@ -54,6 +55,20 @@ class AgentState(TypedDict):
 # ---------------------------------------------------------------------------
 # Utilidades
 # ---------------------------------------------------------------------------
+# Dónde se avisa de los reintentos. Por defecto, print (notebook/terminal); la app de
+# Streamlit lo cambia por una función que actualiza la interfaz. Es un ContextVar para
+# que, con el agente compartido entre sesiones, cada sesión reciba solo sus avisos.
+RETRY_NOTIFIER: contextvars.ContextVar = contextvars.ContextVar("retry_notifier", default=None)
+
+
+def _notify(msg: str) -> None:
+    fn = RETRY_NOTIFIER.get()
+    if fn is None:
+        print(msg, flush=True)
+    else:
+        fn(msg)
+
+
 class LLMTimeoutError(TimeoutError):
     """Se agotó el presupuesto de tiempo de una llamada al LLM."""
 
@@ -110,7 +125,7 @@ class ResilientLLM:
         last_exc: BaseException | None = None
         for i, (model, llm) in enumerate(self.models):
             if i > 0:
-                print(f"🔀 [{self.name}] Probando modelo de respaldo {model}…", flush=True)
+                _notify(f"🔀 [{self.name}] Probando modelo de respaldo {model}…")
             for attempt in range(1, LLM_ATTEMPTS_PER_MODEL + 1):
                 if time.monotonic() - start > LLM_TOTAL_BUDGET:
                     raise LLMTimeoutError(
@@ -125,14 +140,13 @@ class ResilientLLM:
                     last_exc = exc
                     if attempt < LLM_ATTEMPTS_PER_MODEL:
                         wait = 2**attempt + random.random()
-                        print(
+                        _notify(
                             f"⏳ [{self.name}] {model}: {_describe(exc)} — reintentando en {wait:.0f}s "
-                            f"(intento {attempt + 1}/{LLM_ATTEMPTS_PER_MODEL})…",
-                            flush=True,
+                            f"(intento {attempt + 1}/{LLM_ATTEMPTS_PER_MODEL})…"
                         )
                         time.sleep(wait)
                     else:
-                        print(f"⚠️ [{self.name}] {model}: {_describe(exc)} — se agotaron los intentos.", flush=True)
+                        _notify(f"⚠️ [{self.name}] {model}: {_describe(exc)} — se agotaron los intentos.")
         raise LLMTimeoutError(f"[{self.name}] Fallaron todos los modelos: {_describe(last_exc)}") from last_exc
 
 
