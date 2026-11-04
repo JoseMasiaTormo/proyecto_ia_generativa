@@ -16,6 +16,7 @@ import os
 import re
 import time
 import unicodedata
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -457,8 +458,21 @@ class HybridRetriever(BaseRetriever):
     rrf_k: int = 60
     weights: tuple[float, float] = (0.5, 0.5)  # (vectorial, BM25)
 
+    def _vector_search(self, query: str, attempts: int = 3) -> list[Document]:
+        """Búsqueda vectorial con reintentos. Si la API de embeddings sigue fallando
+        (500/503 puntuales), devuelve [] y el retriever sigue funcionando solo con BM25."""
+        for attempt in range(attempts):
+            try:
+                return self.vectorstore.similarity_search(query, k=self.fetch_k)
+            except Exception as err:  # noqa: BLE001
+                if attempt == attempts - 1:
+                    warnings.warn(f"Búsqueda vectorial no disponible ({err}); se usa solo BM25.")
+                    return []
+                time.sleep(2 ** (attempt + 1))
+        return []
+
     def _get_relevant_documents(self, query: str, *, run_manager=None) -> list[Document]:
-        vec = self.vectorstore.similarity_search(query, k=self.fetch_k)
+        vec = self._vector_search(query)
         self.bm25.k = self.fetch_k
         kw = self.bm25.invoke(query)
         scores: dict[str, float] = {}
